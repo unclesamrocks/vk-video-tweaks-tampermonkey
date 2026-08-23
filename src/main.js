@@ -236,16 +236,15 @@
   popup.addEventListener("mouseenter", () => clearTimeout(hideTimeout));
   popup.addEventListener("mouseleave", hidePopup);
 
-  // ========== Collect All Videos (recursive for Shadow DOM) ==========
-  function getAllVideos(root = document) {
+  // ========== Collect All Videos (Shadow DOM) ==========
+  function getAllVideos() {
     const allVideos = [];
 
-    root.querySelectorAll("vk-video-player").forEach((el) => {
+    document.querySelectorAll("vk-video-player").forEach((el) => {
       if (el._shadowRoot) {
         el._shadowRoot
           .querySelectorAll("video")
           .forEach((v) => allVideos.push(v));
-        allVideos.push(...getAllVideos(el._shadowRoot));
       }
     });
 
