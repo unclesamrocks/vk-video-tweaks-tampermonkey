@@ -317,8 +317,12 @@
     const el = document.getElementById("video_recommendations");
     if (!el) return;
 
+    // Parent column container that holds the sticky wrapper + section
+    const column = el.closest(".vkitInternalTwoColumnLayoutColumn");
+    if (!column) return;
+
     recsHidden = !recsHidden;
-    el.style.display = recsHidden ? "none" : "";
+    column.style.display = recsHidden ? "none" : "";
     toggleRecs.textContent = recsHidden ? "Show Recommendations" : "Hide Recommendations";
   });
 
