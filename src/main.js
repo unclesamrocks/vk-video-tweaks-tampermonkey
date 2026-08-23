@@ -7,6 +7,7 @@
 // @match        https://vkvideo.ru/video-*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=vkvideo.ru
 // @grant        none
+// @license MIT
 // ==/UserScript==
 
 (function () {
@@ -241,7 +242,9 @@
 
     root.querySelectorAll("vk-video-player").forEach((el) => {
       if (el._shadowRoot) {
-        el._shadowRoot.querySelectorAll("video").forEach((v) => allVideos.push(v));
+        el._shadowRoot
+          .querySelectorAll("video")
+          .forEach((v) => allVideos.push(v));
         allVideos.push(...getAllVideos(el._shadowRoot));
       }
     });
@@ -323,7 +326,9 @@
 
     recsHidden = !recsHidden;
     column.style.display = recsHidden ? "none" : "";
-    toggleRecs.textContent = recsHidden ? "Show Recommendations" : "Hide Recommendations";
+    toggleRecs.textContent = recsHidden
+      ? "Show Recommendations"
+      : "Hide Recommendations";
   });
 
   // ========== Apply Gain ==========
