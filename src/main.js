@@ -61,7 +61,7 @@
   const popup = document.createElement("div");
   popup.id = "vk-audio-gain-popup";
   popup.innerHTML = `
-    <div id="vk-popup-header">🎵 Audio Gain</div>
+    <div id="vk-popup-header">🎵 VK Video Tweaks</div>
     <div id="vk-popup-content">
       <div class="vk-form-group">
         <label for="vk-video-select">Video Element:</label>
