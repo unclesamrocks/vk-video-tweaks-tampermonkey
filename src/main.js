@@ -7,7 +7,7 @@
 // @match        https://vkvideo.ru/video-*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=vkvideo.ru
 // @grant        none
-// @license MIT
+// @license      MIT
 // ==/UserScript==
 
 (function () {
