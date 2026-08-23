@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         VK Video Audio Gain
+// @name         VK Video Tweaks
 // @namespace    http://tampermonkey.net/
 // @version      2026-08-23
-// @description  Audio gain control for VK Video
+// @description  Audio gain and UI tweaks for VK Video
 // @author       You
 // @match        https://vkvideo.ru/video-*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=vkvideo.ru
