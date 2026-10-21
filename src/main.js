@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VK Video Tweaks
 // @namespace    http://tampermonkey.net/
-// @version      2026-10-21
+// @version      20261021
 // @description  Audio gain and UI tweaks for VK Video
 // @author       You
 // @match        https://vkvideo.ru/video-*
