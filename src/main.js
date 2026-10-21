@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VK Video Tweaks
 // @namespace    http://tampermonkey.net/
-// @version      2026-08-23
+// @version      2026-10-21
 // @description  Audio gain and UI tweaks for VK Video
 // @author       You
 // @match        https://vkvideo.ru/video-*
@@ -14,11 +14,23 @@
   "use strict";
 
   // ========== Audio Gain Function (keep as-is) ==========
+  /**
+   * Route the video's audio through a Web Audio gain node.
+   *
+   * @param {HTMLVideoElement} video - video element whose audio should be boosted
+   * @param {number} gainValue - gain multiplier (0-10)
+   * @returns {void}
+   */
   function gainAudio(video, gainValue) {
     let audioContext;
     let gainNode;
     let source;
 
+    /**
+     * Create the gain graph and connect the media element to the speakers.
+     *
+     * @returns {void}
+     */
     function applyDoubleVolume() {
       if (!video) {
         console.error("No video element found on the page.");
@@ -27,7 +39,10 @@
 
       // Initialize the AudioContext if not already created
       if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const AudioContextCtor =
+          window.AudioContext ||
+          /** @type {any} */ (window).webkitAudioContext;
+        audioContext = new AudioContextCtor();
       }
 
       if (!gainNode) {
@@ -75,6 +90,7 @@
       </div>
       <button id="vk-apply-gain">Apply Audio Gain</button>
       <button id="vk-toggle-recommendations">Hide Recommendations</button>
+      <button id="vk-toggle-fit">Video Fit: Off</button>
     </div>
   `;
   document.body.appendChild(popup);
@@ -207,24 +223,61 @@
     #vk-toggle-recommendations:active {
       transform: translateY(0);
     }
+
+    #vk-toggle-fit {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-top: 8px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #vk-toggle-fit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 176, 155, 0.4);
+    }
+
+    #vk-toggle-fit:active {
+      transform: translateY(0);
+    }
   `;
   document.head.appendChild(style);
 
   // ========== Get Elements ==========
   const header = document.getElementById("vk-popup-header");
-  const videoSelect = document.getElementById("vk-video-select");
-  const gainInput = document.getElementById("vk-gain-value");
+  const videoSelect = /** @type {HTMLSelectElement} */ (
+    document.getElementById("vk-video-select")
+  );
+  const gainInput = /** @type {HTMLInputElement} */ (
+    document.getElementById("vk-gain-value")
+  );
   const applyButton = document.getElementById("vk-apply-gain");
 
   // ========== Show/Hide Popup ==========
   let hideTimeout;
 
+  /**
+   * Refresh the video list and fit mode, then reveal the popup.
+   *
+   * @returns {void}
+   */
   function showPopup() {
     clearTimeout(hideTimeout);
     updateVideoList();
+    applyVideoFit();
     popup.classList.add("visible");
   }
 
+  /**
+   * Hide the popup after a short hover grace period.
+   *
+   * @returns {void}
+   */
   function hidePopup() {
     hideTimeout = setTimeout(() => {
       popup.classList.remove("visible");
@@ -237,12 +290,19 @@
   popup.addEventListener("mouseleave", hidePopup);
 
   // ========== Collect All Videos (Shadow DOM) ==========
+  /**
+   * Collect every video element from all vk-video-player shadow roots.
+   *
+   * @returns {HTMLVideoElement[]} video elements on the page
+   */
   function getAllVideos() {
+    /** @type {HTMLVideoElement[]} */
     const allVideos = [];
 
     document.querySelectorAll("vk-video-player").forEach((el) => {
-      if (el._shadowRoot) {
-        el._shadowRoot
+      const player = /** @type {Element & { _shadowRoot?: ShadowRoot }} */ (el);
+      if (player._shadowRoot) {
+        player._shadowRoot
           .querySelectorAll("video")
           .forEach((v) => allVideos.push(v));
       }
@@ -252,6 +312,11 @@
   }
 
   // ========== Update Video List ==========
+  /**
+   * Rebuild the popup's video <select> from the current page videos.
+   *
+   * @returns {void}
+   */
   function updateVideoList() {
     const allVideos = getAllVideos();
 
@@ -264,7 +329,7 @@
 
     allVideos.forEach((video, index) => {
       const option = document.createElement("option");
-      option.value = index;
+      option.value = String(index);
 
       // Add meta info to label
       let label = `Video ${index + 1}`;
@@ -320,7 +385,9 @@
     if (!el) return;
 
     // Parent column container that holds the sticky wrapper + section
-    const column = el.closest(".vkitInternalTwoColumnLayoutColumn");
+    const column = /** @type {HTMLElement | null} */ (
+      el.closest(".vkitInternalTwoColumnLayoutColumn")
+    );
     if (!column) return;
 
     recsHidden = !recsHidden;
@@ -329,6 +396,149 @@
       ? "Show Recommendations"
       : "Hide Recommendations";
   });
+
+  // ========== Video Fit Mode (off -> width -> height) ==========
+  /**
+   * @typedef {"off" | "width" | "height"} VideoFitMode
+   */
+
+  /**
+   * Snapshot of a video's own inline fit styles, saved before we override them.
+   *
+   * @typedef {Object} OriginalFitStyles
+   * @property {string} objectFit - inline object-fit value ("" if absent)
+   * @property {string} objectFitPriority - its CSS priority ("" or "important")
+   * @property {string} objectPosition - inline object-position value ("" if absent)
+   * @property {string} objectPositionPriority - its CSS priority ("" or "important")
+   */
+
+  const fitButton = document.getElementById("vk-toggle-fit");
+  /** @type {VideoFitMode[]} */
+  const fitModes = ["off", "width", "height"];
+  const fitLabels = {
+    off: "Video Fit: Off",
+    width: "Video Fit: Width",
+    height: "Video Fit: Height",
+  };
+
+  /** @type {VideoFitMode} */
+  let fitMode =
+    /** @type {VideoFitMode} */ (
+      localStorage.getItem("vk-video-fit-mode") || "off"
+    );
+  if (!fitModes.includes(fitMode)) fitMode = "off";
+
+  /**
+   * Pick object-fit so exactly one axis of the video fills the player box:
+   * "width" fills width (vertical overflow is cropped), "height" fills height.
+   *
+   * @param {HTMLVideoElement} video - video element to fit inside its player box
+   * @param {Exclude<VideoFitMode, "off">} mode - which axis must be filled
+   * @returns {"contain" | "cover"} object-fit value implementing the mode
+   */
+  function fitObjectFit(video, mode) {
+    const boxRatio = video.clientWidth / video.clientHeight;
+    const videoRatio = video.videoWidth / video.videoHeight;
+    if (mode === "width") return videoRatio > boxRatio ? "contain" : "cover";
+    return videoRatio < boxRatio ? "contain" : "cover";
+  }
+
+  // Remember the video's own inline styles so "off" can restore them
+  /** @type {WeakMap<HTMLVideoElement, OriginalFitStyles>} */
+  const originalFitStyles = new WeakMap();
+
+  /**
+   * Snapshot the video's original inline fit styles, once per element.
+   *
+   * @param {HTMLVideoElement} video - video element we are about to override
+   * @returns {void}
+   */
+  function saveOriginalFitStyles(video) {
+    if (originalFitStyles.has(video)) return;
+    originalFitStyles.set(video, {
+      objectFit: video.style.getPropertyValue("object-fit"),
+      objectFitPriority: video.style.getPropertyPriority("object-fit"),
+      objectPosition: video.style.getPropertyValue("object-position"),
+      objectPositionPriority: video.style.getPropertyPriority("object-position"),
+    });
+  }
+
+  /**
+   * Restore the video's saved inline fit styles (no-op if never overridden).
+   *
+   * @param {HTMLVideoElement} video - video element to restore
+   * @returns {void}
+   */
+  function restoreOriginalFitStyles(video) {
+    const original = originalFitStyles.get(video);
+    if (!original) return;
+    originalFitStyles.delete(video);
+
+    [
+      ["object-fit", original.objectFit, original.objectFitPriority],
+      ["object-position", original.objectPosition, original.objectPositionPriority],
+    ].forEach(([name, value, priority]) => {
+      if (value) {
+        video.style.setProperty(name, value, priority);
+      } else {
+        video.style.removeProperty(name);
+      }
+    });
+  }
+
+  /**
+   * Apply the current fit mode to every video on the page.
+   *
+   * @returns {void}
+   */
+  function applyVideoFit() {
+    getAllVideos().forEach((video) => {
+      videoResizeObserver.observe(video);
+
+      if (fitMode === "off") {
+        restoreOriginalFitStyles(video);
+        return;
+      }
+
+      // Metadata not loaded yet -> retry once it is
+      if (!video.videoWidth || !video.videoHeight) {
+        video.addEventListener("loadedmetadata", () => applyVideoFit(), {
+          once: true,
+        });
+        return;
+      }
+
+      saveOriginalFitStyles(video);
+      video.style.setProperty(
+        "object-fit",
+        fitObjectFit(video, fitMode),
+        "important"
+      );
+      video.style.setProperty("object-position", "center", "important");
+    });
+  }
+
+  const videoResizeObserver = new ResizeObserver(() => applyVideoFit());
+
+  fitButton.addEventListener("click", () => {
+    fitMode = fitModes[(fitModes.indexOf(fitMode) + 1) % fitModes.length];
+    localStorage.setItem("vk-video-fit-mode", fitMode);
+    fitButton.textContent = fitLabels[fitMode];
+    applyVideoFit();
+  });
+
+  // Catch videos that appear or change size after page navigation
+  let fitApplyTimer;
+  new MutationObserver(() => {
+    if (fitMode === "off") return;
+    clearTimeout(fitApplyTimer);
+    fitApplyTimer = setTimeout(applyVideoFit, 300);
+  }).observe(document.body, { childList: true, subtree: true });
+
+  window.addEventListener("resize", applyVideoFit);
+
+  fitButton.textContent = fitLabels[fitMode];
+  applyVideoFit();
 
   // ========== Apply Gain ==========
   applyButton.addEventListener("click", () => {
